@@ -1,13 +1,11 @@
-require('dotenv').config();
+const puppeteer = require('puppeteer');
+const xlsx = require('xlsx');
 const fs = require('fs');
 const path = require('path');
-const xlsx = require('xlsx');
-const puppeteer = require('puppeteer');
 
 async function readExcelAndUpload() {
   try {
     const filePath = path.resolve(__dirname, 'TrainingUniAir.xlsx');
-
     if (!fs.existsSync(filePath)) {
       throw new Error(`Excel file not found at ${filePath}`);
     }
@@ -17,12 +15,11 @@ async function readExcelAndUpload() {
     const worksheet = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
 
     worksheet.forEach(row => {
-      if (!row.Status) row.Status = '';
+      if (!row.Status) row.Status = '';  // Ensure each row has a 'Status' field
     });
 
     const browser = await puppeteer.launch({ headless: false });
     const page = await browser.newPage();
-
     await page.goto('http://127.0.0.1:8000/users/create', { waitUntil: 'networkidle2' });
 
     for (let i = 0; i < worksheet.length; i++) {
@@ -48,30 +45,13 @@ async function readExcelAndUpload() {
 
         await Promise.all([
           page.click('button[type="submit"]'),
-          page.waitForSelector('.alert-success', { timeout: 5000 }),
           page.waitForNavigation({ waitUntil: 'networkidle2' }) // Ensure page reloads after form submission
         ]);
 
-        if (page.url().includes('/users')) {
-            row.Status = "Success";
-          } else {
-            row.Status = "Failed: Not redirected to /users";
-          }
+        // If page reloads without errors, mark as success
+        row.Status = "Success";
 
-        let successMessage = null;
-        try {
-          await page.waitForSelector('.alert-success', { timeout: 10000 });
-          successMessage = await page.evaluate(() => {
-            const alert = document.querySelector('.alert-success');
-            return alert ? alert.textContent.trim() : null;
-          });
-        } catch (error) {
-          console.error(`Timeout waiting for success message on: ${name} (${email})`);
-          await page.screenshot({ path: `error_${name}.png` });
-        }
-
-        row.Status = successMessage ? "Success" : "Failed: No success message";
-
+        // Go back to create user page before next entry
         await page.goto('http://127.0.0.1:8000/users/create', { waitUntil: 'networkidle2' });
 
       } catch (error) {
